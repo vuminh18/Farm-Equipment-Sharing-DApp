@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trạm máy | Hợp tác xã</title>
+<style>
+:root{color-scheme:light;--ink:#192b24;--muted:#54645b;--green:#23533f;--bg:#f5f5ed;--paper:#fffefa;--line:#dce2d9}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "DM Sans",system-ui,sans-serif}
+.wrap{width:min(1080px,calc(100% - 40px));margin:auto}header{background:var(--ink);color:#fffefa}
+.top{min-height:75px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0}
+.brand{display:flex;align-items:center;gap:12px;font-weight:760}.mark{display:grid;place-items:center;width:37px;height:37px;border-radius:11px;background:#ddedb4;color:var(--ink);font-weight:900}
+.wallet{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.chain{font-size:.86rem;color:#dae7cc}.chain::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#c0df88;margin-right:6px}
+button,input{font:inherit}button{cursor:pointer;background:var(--green);color:white;border:1px solid transparent;border-radius:9px;padding:9px 14px;font-weight:700}
+button:hover:not(:disabled){filter:brightness(1.14)}button:disabled{opacity:.55;cursor:default}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #8a7028;outline-offset:3px}
+#wallet-button{background:#ddedb4;color:var(--ink)}main{padding:34px 0}
+.hero{background:#e8eddb;border:1px solid #d6dfc9;border-radius:20px;padding:clamp(22px,5vw,48px);display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap}
+h1,h2,h3,p,dl,dd{margin:0}h1{font-size:clamp(2.3rem,6vw,4rem);line-height:1.05;letter-spacing:-.055em;margin:0 0 11px}
+.sub,small,dt{color:var(--muted)}.stats{display:flex;gap:24px;flex-wrap:wrap}.stat{padding-left:14px;border-left:2px solid #a9b89a}.stat dd{font-size:1.65rem;font-weight:780;letter-spacing:-.04em}
+.toolbar{margin:26px 0 12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}h2{font-size:1.35rem}
+.secondary{background:transparent;color:var(--green);border-color:#a5b6a9}.notice{margin-bottom:15px;padding:10px 13px;border-radius:8px;background:#edf0e8;overflow-wrap:anywhere}.notice[data-kind="error"]{background:#f8e9e3;color:#812b18}.notice[data-kind="ok"]{background:#e3eee2;color:#234d39}.notice a{margin-left:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(285px,100%),1fr));gap:13px}.card{padding:17px;background:var(--paper);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;gap:12px}
+.cardhead{display:flex;align-items:center;justify-content:space-between;gap:8px}.card h3{font-size:1.08rem}.badge{padding:4px 8px;border-radius:999px;background:#eee;white-space:nowrap;font-size:.78rem;font-weight:700}.free{background:#e4efdf;color:#275139}.rented{background:#f5e8cc;color:#604812}
+.card dl{font-size:.88rem}.card dl div{display:flex;justify-content:space-between;gap:8px}.card dd{text-align:right;overflow-wrap:anywhere}.controls{margin-top:auto;display:grid;gap:9px}.days{display:flex;align-items:center;justify-content:space-between;gap:8px}input{width:75px;border:1px solid #aab9ac;border-radius:7px;padding:6px 8px;background:#fff;color:var(--ink)}output{color:var(--muted);font-size:.88rem}
+footer{margin-top:22px;font-size:.9rem;color:var(--muted)}a{color:#214c39;text-underline-offset:3px}
+</style>
+</head>
+<body>
+<header><div class="wrap top">
+  <div class="brand"><span class="mark" aria-hidden="true">M</span> Trạm máy hợp tác xã</div>
+  <div class="wallet"><span class="chain">Sepolia</span><button id="wallet-button" type="button">Kết nối MetaMask</button></div>
+</div></header>
+<main class="wrap">
+  <section class="hero" aria-labelledby="title">
+    <div><h1 id="title">Thuê máy kéo</h1><p id="account-label" class="sub">Kết nối ví để xem máy và thực hiện giao dịch.</p></div>
+    <dl class="stats">
+      <div class="stat"><dt>Máy đang rảnh</dt><dd id="free-count">— / 6</dd></div>
+      <div class="stat"><dt>Phí thuê mỗi ngày</dt><dd id="rate">—</dd></div>
+    </dl>
+  </section>
+  <div class="toolbar"><h2>Danh sách máy</h2><button id="refresh-button" type="button" class="secondary" disabled>Làm mới</button></div>
+  <div class="notice" id="notice" role="status" aria-live="polite">Chọn Kết nối MetaMask để đọc dữ liệu trên Sepolia.</div>
+  <div class="grid" id="tractors"></div>
+  <footer>Hợp đồng Sepolia <a id="contract-link" target="_blank" rel="noopener noreferrer">0x309b…45D78</a></footer>
+</main>
+<template id="tractor-template">
+  <article class="card">
+    <div class="cardhead"><h3></h3><span class="badge"></span></div>
+    <dl hidden><div><dt>Ví thuê</dt><dd class="renter"></dd></div><div><dt>Hạn trả</dt><dd class="due"></dd></div></dl>
+    <div class="controls"></div>
+  </article>
+</template>
+<script>
+'use strict';
+
+const CONTRACT = '0x309b2c1EA5ab45788E1ADa43C2e57998AD645D78';
+const SEPOLIA = '0xaa36a7';
+const EXPLORER = 'https://sepolia.etherscan.io';
+const ZERO_ADDRESS = '0x' + '0'.repeat(40);
+const IDS = [1, 2, 3, 4, 5, 6];
+// Selectors derived from the supplied Solidity ABI.
+const SELECTOR = {
+  'manager()': '481c6a75',
+  'RATE_PER_DAY()': 'a9322d41',
+  'getTractorStatus(uint256)': '81193cff',
+  'registerTractor(uint256)': 'f9ce440b',
+  'rentTractor(uint256,uint256)': 'f4cfa104',
+  'returnTractor(uint256)': '0295b9a5'
+};
+const $ = (id) => document.getElementById(id);
+const walletButton = $('wallet-button');
+const refreshButton = $('refresh-button');
+const injected = window.ethereum;
+const wallet = injected?.providers?.find((provider) => provider.isMetaMask) ?? injected;
+const dayInputs = new Map();
+let account = '';
+let chain = '';
+let manager = '';
+let rate = null;
+let tractors = [];
+let busy = false;
+let connecting = false;
+let refreshing = false;
+let revision = 0;
+$('contract-link').href = EXPLORER + '/address/' + CONTRACT;
+
+const short = (address) => address.slice(0, 6) + '…' + address.slice(-5);
+const sameAddress = (a, b) => a.toLowerCase() === b.toLowerCase();
+const isRented = (tractor) => !sameAddress(tractor.renter, ZERO_ADDRESS);
+const quantity = (value) => '0x' + value.toString(16);
+const dataFor = (signature, ...args) => '0x' + SELECTOR[signature] + args.map((arg) => BigInt(arg).toString(16).padStart(64, '0')).join('');
+const request = (method, params = []) => wallet.request({method, params});
+const call = (signature, args, block) => request('eth_call', [{to: CONTRACT, data: dataFor(signature, ...args)}, block]);
+
+function eth(wei) {
+  const [whole, digits] = [wei / 10n ** 18n, (wei % 10n ** 18n).toString().padStart(18, '0')];
+  const fraction = digits.replace(/0+$/, '');
+  return whole.toString() + (fraction ? ',' + fraction : '') + ' SepoliaETH';
+}
+
+function words(result, count) {
+  const payload = result.slice(2);
+  if (!/^0x[\da-f]+$/i.test(result) || payload.length !== count * 64) {
+    throw new Error('Dữ liệu trả về không khớp ABI. Kiểm tra địa chỉ hợp đồng trên Sepolia.');
+  }
+  return Array.from({length: count}, (_, index) => payload.slice(index * 64, (index + 1) * 64));
+}
+
+function setNotice(message, kind = '', hash) {
+  const notice = $('notice');
+  notice.textContent = message;
+  notice.dataset.kind = kind;
+  if (hash) {
+    const link = document.createElement('a');
+    link.href = EXPLORER + '/tx/' + hash;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Xem giao dịch';
+    notice.append(link);
+  }
+}
+
+function explain(error) {
+  const code = error?.code ?? error?.info?.error?.code;
+  if (code === 4001 || code === 'ACTION_REJECTED') return 'Bạn đã hủy yêu cầu trong ví.';
+  if (code === -32002) return 'MetaMask đang có yêu cầu chờ. Hãy mở tiện ích để xử lý.';
+  if (code === 4902) return 'Hãy bật mạng thử nghiệm và chọn Sepolia trong MetaMask, sau đó thử lại.';
+  const message = error?.data?.message ?? error?.message ?? String(error);
+  if (/insufficient funds/i.test(message)) return 'Ví thiếu SepoliaETH để trả phí giao dịch và khoản thuê nếu có.';
+  return message;
+}
+
+function render() {
+  walletButton.disabled = busy || connecting || Boolean(account && chain === SEPOLIA);
+  walletButton.textContent = account && chain === SEPOLIA ? short(account) : 'Kết nối MetaMask';
+  $('account-label').textContent = account && chain === SEPOLIA
+    ? (manager ? (sameAddress(account, manager) ? 'Ví quản lý · ' : 'Ví nông hộ · ') : 'Ví đã kết nối · ') + short(account)
+    : account ? 'Hãy chuyển mạng sang Sepolia.' : 'Kết nối ví để xem máy và thực hiện giao dịch.';
+  refreshButton.disabled = !wallet || !account || chain !== SEPOLIA || busy || refreshing;
+  $('free-count').textContent = (tractors.length ? tractors.filter((tractor) => tractor.registered && !isRented(tractor)).length : '—') + ' / 6';
+  $('rate').textContent = rate === null ? '—' : eth(rate);
+  $('tractors').replaceChildren(...IDS.map((id) => renderTractor(id, tractors[id - 1])));
+}
+
+function renderTractor(id, tractor) {
+  const card = $('tractor-template').content.firstElementChild.cloneNode(true);
+  card.querySelector('h3').textContent = 'Máy kéo ' + String(id).padStart(2, '0');
+  const badge = card.querySelector('.badge');
+  const controls = card.querySelector('.controls');
+  if (!tractor) {
+    badge.textContent = 'Chưa có dữ liệu';
+    return card;
+  }
+
+  const addButton = (label, action) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.disabled = busy || refreshing;
+    button.addEventListener('click', action);
+    controls.append(button);
+  };
+
+  if (!tractor.registered) {
+    badge.textContent = 'Chưa đăng ký';
+    if (sameAddress(account, manager)) {
+      addButton('Đăng ký máy', () => transact('registerTractor(uint256)', [id], 0n, 'Đăng ký máy ' + id));
+    }
+  } else if (isRented(tractor)) {
+    badge.textContent = 'Đang thuê';
+    badge.classList.add('rented');
+    card.querySelector('dl').hidden = false;
+    card.querySelector('.renter').textContent = short(tractor.renter);
+    card.querySelector('.renter').title = tractor.renter;
+    card.querySelector('.due').textContent = tractor.dueAt > 0n && tractor.dueAt <= 8640000000000n
+      ? new Date(Number(tractor.dueAt) * 1000).toLocaleString('vi-VN') : '—';
+    if (sameAddress(account, tractor.renter)) {
+      addButton('Trả máy', () => transact('returnTractor(uint256)', [id], 0n, 'Trả máy ' + id));
+    }
+  } else {
+    badge.textContent = 'Đang rảnh';
+    badge.classList.add('free');
+    renderRentForm(controls, id, addButton);
+  }
+  return card;
+}
+
+function renderRentForm(controls, id, addButton) {
+  const label = document.createElement('label');
+  label.className = 'days';
+  label.textContent = 'Số ngày thuê';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '1';
+  input.step = '1';
+  input.required = true;
+  input.value = dayInputs.get(id) ?? '1';
+  input.disabled = busy || refreshing;
+  label.append(input);
+  const total = document.createElement('output');
+  controls.append(label, total);
+
+  function getDays() {
+    if (!input.validity.valid || !/^\d+$/.test(input.value)) return null;
+    const days = BigInt(input.value);
+    return days <= ((1n << 256n) - 1n) / (rate > 0n ? rate : 1n) ? days : null;
+  }
+
+  addButton('Thuê máy', () => {
+    const days = getDays();
+    if (days === null) return;
+    transact('rentTractor(uint256,uint256)', [id, days], rate * days, 'Thuê máy ' + id);
+  });
+  const button = controls.lastElementChild;
+  function update() {
+    dayInputs.set(id, input.value);
+    const days = getDays();
+    total.textContent = days === null ? 'Nhập số ngày nguyên lớn hơn 0.' : 'Tổng phí thuê ' + eth(rate * days);
+    button.disabled = busy || refreshing || days === null;
+  }
+  input.addEventListener('input', update);
+  update();
+}
+
+async function refresh(successMessage = 'Đã cập nhật dữ liệu từ Sepolia.', hash) {
+  const current = ++revision;
+  refreshing = true;
+  render();
+  try {
+    const [accounts, chainId] = await Promise.all([request('eth_accounts'), request('eth_chainId')]);
+    if (current !== revision) return;
+    account = accounts[0] ?? '';
+    chain = chainId;
+    if (!account || chain !== SEPOLIA) {
+      tractors = [];
+      manager = '';
+      rate = null;
+      setNotice(account ? 'Chọn Sepolia trong MetaMask hoặc bấm Kết nối MetaMask.' : 'Chọn Kết nối MetaMask để tiếp tục.', '', hash);
+      return;
+    }
+
+    const block = await request('eth_blockNumber');
+    const code = await request('eth_getCode', [CONTRACT, block]);
+    if (code === '0x' || code === '0x0') throw new Error('Chưa tìm thấy mã hợp đồng ở địa chỉ này trên Sepolia.');
+    const [managerResult, rateResult, ...statuses] = await Promise.all([
+      call('manager()', [], block),
+      call('RATE_PER_DAY()', [], block),
+      ...IDS.map((id) => call('getTractorStatus(uint256)', [id], block))
+    ]);
+    if (current !== revision) return;
+    const nextRate = BigInt('0x' + words(rateResult, 1)[0]);
+    const nextManager = '0x' + words(managerResult, 1)[0].slice(-40);
+    const nextTractors = statuses.map((result) => {
+      const [registered, renter, dueAt] = words(result, 3);
+      const flag = BigInt('0x' + registered);
+      if (flag !== 0n && flag !== 1n) throw new Error('Giá trị registered không hợp lệ.');
+      return {registered: flag === 1n, renter: '0x' + renter.slice(-40), dueAt: BigInt('0x' + dueAt)};
+    });
+    manager = nextManager;
+    rate = nextRate;
+    tractors = nextTractors;
+    if (!busy || hash) setNotice(successMessage, 'ok', hash);
+  } catch (error) {
+    if (current !== revision) return;
+    tractors = [];
+    manager = '';
+    rate = null;
+    setNotice((hash ? successMessage + ' ' : '') + 'Không đọc được dữ liệu. ' + explain(error), 'error', hash);
+  } finally {
+    if (current === revision) {
+      refreshing = false;
+      render();
+    }
+  }
+}
+
+async function connect() {
+  if (!wallet) {
+    setNotice('Mở trang bằng Chrome có cài và mở khóa tiện ích MetaMask.', 'error');
+    return;
+  }
+  if (connecting) return;
+  connecting = true;
+  render();
+  try {
+    await request('eth_requestAccounts');
+    if (await request('eth_chainId') !== SEPOLIA) {
+      await request('wallet_switchEthereumChain', [{chainId: SEPOLIA}]);
+    }
+    await refresh();
+  } catch (error) {
+    setNotice(explain(error), 'error');
+  } finally {
+    connecting = false;
+    render();
+  }
+}
+
+async function transact(signature, args, value, label) {
+  if (busy || refreshing || chain !== SEPOLIA || !account) return;
+  const sender = account;
+  busy = true;
+  render();
+  let hash;
+  try {
+    const [accounts, chainId] = await Promise.all([request('eth_accounts'), request('eth_chainId')]);
+    if (chainId !== SEPOLIA || !sameAddress(accounts[0] ?? '', sender)) {
+      throw new Error('Ví hoặc mạng đã thay đổi. Hãy làm mới danh sách máy.');
+    }
+    setNotice(label + '. Kiểm tra và xác nhận trong MetaMask.');
+    hash = await request('eth_sendTransaction', [{from: sender, to: CONTRACT, data: dataFor(signature, ...args), value: quantity(value)}]);
+    setNotice(label + '. Đang chờ Sepolia xác nhận.', '', hash);
+    for (let attempt = 0; attempt < 60; attempt++) {
+      if (await request('eth_chainId') !== SEPOLIA) break;
+      const receipt = await request('eth_getTransactionReceipt', [hash]);
+      if (receipt) {
+        if (BigInt(receipt.status) !== 1n) throw new Error('Sepolia báo giao dịch thất bại.');
+        await refresh(label + ' thành công.', hash);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    setNotice('Đã gửi giao dịch. Kiểm tra kết quả trên Etherscan trước khi gửi lại.', '', hash);
+  } catch (error) {
+    setNotice(label + '. ' + explain(error), 'error', hash);
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
+walletButton.addEventListener('click', connect);
+refreshButton.addEventListener('click', () => refresh());
+if (wallet) {
+  const syncWallet = () => {
+    if (!connecting) refresh();
+  };
+  wallet.on?.('chainChanged', syncWallet);
+  wallet.on?.('accountsChanged', syncWallet);
+  refresh();
+} else {
+  render();
+}
+</script>
+</body>
+</html>
